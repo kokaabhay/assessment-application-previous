@@ -1,5 +1,4 @@
 from decimal import Decimal
-from app.core.exceptions import ResourceNotFoundError
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.vendor_cache import vendor_cache
 from app.db.models import Vendor
@@ -7,6 +6,10 @@ from app.repositories.vendor_repository import VendorRepository
 from app.schemas.vendors import (
     VendorCreateRequest,
     VendorUpdateRequest,
+)
+from app.core.exceptions import (
+    BusinessRuleError,
+    ResourceNotFoundError,
 )
 
 
@@ -60,7 +63,7 @@ class VendorService:
         """Create a new vendor."""
 
         if data.annual_budget_cap < Decimal("0"):
-            raise ValueError(
+            raise BusinessRuleError(
                 "Annual budget cap cannot be negative."
             )
 
@@ -105,10 +108,17 @@ class VendorService:
                 value,
             )
 
-        return await VendorRepository.update(
+        updated_vendor = await VendorRepository.update(
             db,
             vendor,
         )
+
+        # Invalidate cached vendor after update
+        vendor_cache.delete(
+            f"vendor:{vendor_id}"
+        )
+
+        return updated_vendor
 
     @staticmethod
     async def delete_vendor(
@@ -125,4 +135,9 @@ class VendorService:
         await VendorRepository.delete(
             db,
             vendor,
+        )
+
+        # Invalidate cached vendor after deletion
+        vendor_cache.delete(
+            f"vendor:{vendor_id}"
         )

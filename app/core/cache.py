@@ -1,7 +1,9 @@
 import time
 from dataclasses import dataclass
 from typing import Any
+import logging
 
+logger = logging.getLogger(__name__)
 
 @dataclass
 class CacheEntry:
@@ -56,3 +58,32 @@ class TTLCache:
         """Clear the entire cache."""
 
         self._data.clear()
+
+    def get(self, key: str) -> Any | None:
+        """Return cached value if present and not expired."""
+
+        entry = self._data.get(key)
+
+        if entry is None:
+            logger.debug(
+                "Cache MISS: key=%s",
+                key,
+            )
+            return None
+
+        if time.monotonic() >= entry.expires_at:
+            del self._data[key]
+
+            logger.debug(
+                "Cache EXPIRED: key=%s",
+                key,
+            )
+
+            return None
+
+        logger.debug(
+            "Cache HIT: key=%s",
+            key,
+        )
+
+        return entry.value
