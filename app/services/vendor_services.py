@@ -1,5 +1,5 @@
 from decimal import Decimal
-
+from app.core.exceptions import ResourceNotFoundError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Vendor
@@ -26,7 +26,7 @@ class VendorService:
         )
 
         if vendor is None:
-            raise ValueError("Vendor not found.")
+            raise ResourceNotFoundError("Vendor not found.")
 
         return vendor
 
