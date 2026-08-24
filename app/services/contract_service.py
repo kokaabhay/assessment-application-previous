@@ -1,5 +1,7 @@
-from datetime import date
-from app.repositories.vendor_repository import VendorRepository
+import csv
+import io
+import json
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import (
@@ -9,6 +11,7 @@ from app.core.exceptions import (
 )
 from app.db.models import Contract, User
 from app.repositories.contract_repository import ContractRepository
+from app.repositories.vendor_repository import VendorRepository
 from app.schemas.contracts import (
     ContractCreateRequest,
     ContractUpdateRequest,
@@ -68,6 +71,7 @@ class ContractService:
         current_user: User,
     ) -> Contract:
         """Create a contract owned by the current user."""
+
         vendor = await VendorRepository.get_by_id(
             db,
             data.vendor_id,
@@ -77,6 +81,7 @@ class ContractService:
             raise ResourceNotFoundError(
                 "Vendor not found."
             )
+
         if data.end_date <= data.start_date:
             raise BusinessRuleError(
                 "Contract end date must be after start date."
@@ -123,15 +128,18 @@ class ContractService:
         update_data = data.model_dump(
             exclude_unset=True
         )
+
         if "vendor_id" in update_data:
             vendor = await VendorRepository.get_by_id(
                 db,
                 update_data["vendor_id"],
             )
+
             if vendor is None:
                 raise ResourceNotFoundError(
                     "Vendor not found."
                 )
+
         new_start_date = update_data.get(
             "start_date",
             contract.start_date,
@@ -187,4 +195,95 @@ class ContractService:
         await ContractRepository.delete(
             db,
             contract,
+        )
+
+    @staticmethod
+    async def export_contracts_csv(
+        db: AsyncSession,
+        current_user: User,
+    ) -> str:
+        """Export contracts accessible to the current user as CSV."""
+
+        contracts = await ContractService.get_contracts(
+            db,
+            current_user,
+        )
+
+        output = io.StringIO()
+
+        writer = csv.writer(output)
+
+        writer.writerow(
+            [
+                "id",
+                "vendor_id",
+                "title",
+                "contract_value",
+                "spend",
+                "start_date",
+                "end_date",
+                "renewal_type",
+                "status",
+                "owner_id",
+                "service_scope",
+            ]
+        )
+
+        for contract in contracts:
+            writer.writerow(
+                [
+                    contract.id,
+                    contract.vendor_id,
+                    contract.title,
+                    contract.contract_value,
+                    contract.spend,
+                    contract.start_date,
+                    contract.end_date,
+                    contract.renewal_type,
+                    contract.status,
+                    contract.owner_id,
+                    contract.service_scope,
+                ]
+            )
+
+        return output.getvalue()
+
+    @staticmethod
+    async def export_contracts_json(
+        db: AsyncSession,
+        current_user: User,
+    ) -> str:
+        """Export contracts accessible to the current user as JSON."""
+
+        contracts = await ContractService.get_contracts(
+            db,
+            current_user,
+        )
+
+        data = []
+
+        for contract in contracts:
+            data.append(
+                {
+                    "id": contract.id,
+                    "vendor_id": contract.vendor_id,
+                    "title": contract.title,
+                    "contract_value": float(
+                        contract.contract_value
+                    ),
+                    "spend": float(
+                        contract.spend
+                    ),
+                    "start_date": contract.start_date.isoformat(),
+                    "end_date": contract.end_date.isoformat(),
+                    "renewal_type": contract.renewal_type,
+                    "status": contract.status,
+                    "owner_id": contract.owner_id,
+                    "service_scope": contract.service_scope,
+                }
+            )
+
+        return json.dumps(
+            data,
+            indent=2,
         )

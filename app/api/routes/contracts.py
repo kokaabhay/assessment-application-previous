@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends,Query
+from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.services.llm_services import LLMService
 from app.schemas.llm import ContractAnalysis
@@ -190,4 +191,44 @@ async def analyze_contract(
 
     return await llm_service.analyze_contract(
         contract
+    )
+
+@router.get("/export")
+async def export_contracts(
+    format: str = Query(
+        default="csv",
+        pattern="^(csv|json)$",
+    ),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Export contracts as CSV or JSON."""
+
+    if format == "csv":
+        content = await ContractService.export_contracts_csv(
+            db,
+            current_user,
+        )
+
+        return Response(
+            content=content,
+            media_type="text/csv",
+            headers={
+                "Content-Disposition":
+                    "attachment; filename=contracts.csv"
+            },
+        )
+
+    content = await ContractService.export_contracts_json(
+        db,
+        current_user,
+    )
+
+    return Response(
+        content=content,
+        media_type="application/json",
+        headers={
+            "Content-Disposition":
+                "attachment; filename=contracts.json"
+        },
     )
