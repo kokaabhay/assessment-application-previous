@@ -69,3 +69,18 @@ class VendorRepository:
 
         await db.delete(vendor)
         await db.commit()
+
+    @staticmethod
+    async def get_by_id(
+        db: AsyncSession,
+        vendor_id: int,
+    ) -> Vendor | None:
+        """Get a vendor by ID."""
+
+        result = await db.execute(
+            select(Vendor).where(
+                Vendor.id == vendor_id
+            )
+        )
+
+        return result.scalar_one_or_none()

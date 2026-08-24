@@ -1,12 +1,24 @@
 from fastapi import Request
 from fastapi.responses import JSONResponse
-
+from app.core.exceptions import ForbiddenError
 from app.core.exceptions import (
     BusinessRuleError,
     ResourceConflictError,
     ResourceNotFoundError,
 )
 
+async def forbidden_handler(
+    request: Request,
+    exc: ForbiddenError,
+) -> JSONResponse:
+    """Handle authorization failures."""
+
+    return JSONResponse(
+        status_code=403,
+        content={
+            "detail": str(exc),
+        },
+    )
 
 async def resource_not_found_handler(
     request: Request,

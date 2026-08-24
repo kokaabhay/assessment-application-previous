@@ -1,6 +1,7 @@
 import logging
 from app.db import models
 from contextlib import asynccontextmanager
+from app.api.routes.contracts import router as contracts_router
 from app.api.routes.auth import router as auth_router
 from fastapi import FastAPI
 from app.api.routes.vendors import router as vendors_router
@@ -17,6 +18,8 @@ from app.core.exception_handlers import (
     resource_conflict_handler,
     resource_not_found_handler,
 )
+from app.core.exceptions import ForbiddenError
+from app.core.exception_handlers import forbidden_handler
 
 setup_logging()
 
@@ -47,6 +50,7 @@ app = FastAPI(
     version=settings.app_version,
     lifespan=lifespan,
 )
+app.include_router(contracts_router)
 app.include_router(auth_router)
 app.include_router(vendors_router)
 app.add_exception_handler(
@@ -60,6 +64,10 @@ app.add_exception_handler(
 app.add_exception_handler(
     BusinessRuleError,
     business_rule_handler,
+)
+app.add_exception_handler(
+    ForbiddenError,
+    forbidden_handler,
 )
 
 @app.get("/health")
