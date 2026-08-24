@@ -7,7 +7,16 @@ from app.api.routes.vendors import router as vendors_router
 from app.core.config import settings
 from app.core.logging_config import setup_logging
 from app.db.database import close_database, create_tables
-
+from app.core.exceptions import (
+    BusinessRuleError,
+    ResourceConflictError,
+    ResourceNotFoundError,
+)
+from app.core.exception_handlers import (
+    business_rule_handler,
+    resource_conflict_handler,
+    resource_not_found_handler,
+)
 
 setup_logging()
 
@@ -40,7 +49,18 @@ app = FastAPI(
 )
 app.include_router(auth_router)
 app.include_router(vendors_router)
-
+app.add_exception_handler(
+    ResourceNotFoundError,
+    resource_not_found_handler,
+)
+app.add_exception_handler(
+    ResourceConflictError,
+    resource_conflict_handler,
+)
+app.add_exception_handler(
+    BusinessRuleError,
+    business_rule_handler,
+)
 
 @app.get("/health")
 async def health_check() -> dict[str, str]:

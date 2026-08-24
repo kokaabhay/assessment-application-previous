@@ -12,3 +12,11 @@ class ResourceConflictError(ApplicationError):
 
 class BusinessRuleError(ApplicationError):
     """Raised when a business rule is violated."""
+
+
+class UnauthorizedError(ApplicationError):
+    """Raised when authentication is required or invalid."""
+
+
+class ForbiddenError(ApplicationError):
+    """Raised when the authenticated user lacks permission."""

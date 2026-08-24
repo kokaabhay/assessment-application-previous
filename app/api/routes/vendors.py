@@ -45,17 +45,10 @@ async def get_vendor(
 ) -> Vendor:
     """Return a single vendor."""
 
-    try:
-        return await VendorService.get_vendor(
-            db,
-            vendor_id,
-        )
-
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(exc),
-        ) from exc
+    return await VendorService.get_vendor(
+        db,
+        vendor_id,
+    ) 
 
 
 @router.post(
@@ -90,24 +83,17 @@ async def update_vendor(
     ),
     db: AsyncSession = Depends(get_db),
 ) -> Vendor:
+    """Update a vendor. Admin only."""
 
-    try:
-        return await VendorService.update_vendor(
-            db,
-            vendor_id,
-            request,
-        )
-
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(exc),
-        ) from exc
-
+    return await VendorService.update_vendor(
+        db,
+        vendor_id,
+        request,
+    )
 
 @router.delete(
     "/{vendor_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
+    status_code=204,
 )
 async def delete_vendor(
     vendor_id: int,
@@ -116,15 +102,9 @@ async def delete_vendor(
     ),
     db: AsyncSession = Depends(get_db),
 ) -> None:
+    """Delete a vendor. Admin only."""
 
-    try:
-        await VendorService.delete_vendor(
-            db,
-            vendor_id,
-        )
-
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(exc),
-        ) from exc
+    await VendorService.delete_vendor(
+        db,
+        vendor_id,
+    )
