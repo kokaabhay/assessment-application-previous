@@ -37,6 +37,46 @@ router = APIRouter(
     "/import",
     status_code=202,
 )
+
+@router.get("/export")
+async def export_contracts(
+    format: str = Query(
+        default="csv",
+        pattern="^(csv|json)$",
+    ),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Export contracts as CSV or JSON."""
+
+    if format == "csv":
+        content = await ContractService.export_contracts_csv(
+            db,
+            current_user,
+        )
+
+        return Response(
+            content=content,
+            media_type="text/csv",
+            headers={
+                "Content-Disposition":
+                    "attachment; filename=contracts.csv"
+            },
+        )
+
+    content = await ContractService.export_contracts_json(
+        db,
+        current_user,
+    )
+
+    return Response(
+        content=content,
+        media_type="application/json",
+        headers={
+            "Content-Disposition":
+                "attachment; filename=contracts.json"
+        },
+    )
 async def import_contracts(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
@@ -193,42 +233,3 @@ async def analyze_contract(
         contract
     )
 
-@router.get("/export")
-async def export_contracts(
-    format: str = Query(
-        default="csv",
-        pattern="^(csv|json)$",
-    ),
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    """Export contracts as CSV or JSON."""
-
-    if format == "csv":
-        content = await ContractService.export_contracts_csv(
-            db,
-            current_user,
-        )
-
-        return Response(
-            content=content,
-            media_type="text/csv",
-            headers={
-                "Content-Disposition":
-                    "attachment; filename=contracts.csv"
-            },
-        )
-
-    content = await ContractService.export_contracts_json(
-        db,
-        current_user,
-    )
-
-    return Response(
-        content=content,
-        media_type="application/json",
-        headers={
-            "Content-Disposition":
-                "attachment; filename=contracts.json"
-        },
-    )

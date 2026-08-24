@@ -1,7 +1,3 @@
-import csv
-import io
-import json
-
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import (
@@ -129,6 +125,7 @@ class ContractService:
             exclude_unset=True
         )
 
+        # Validate vendor if it is being changed.
         if "vendor_id" in update_data:
             vendor = await VendorRepository.get_by_id(
                 db,
@@ -140,6 +137,7 @@ class ContractService:
                     "Vendor not found."
                 )
 
+        # Get the final values after applying the update.
         new_start_date = update_data.get(
             "start_date",
             contract.start_date,
@@ -160,16 +158,19 @@ class ContractService:
             contract.spend,
         )
 
+        # Business rule: end date must be after start date.
         if new_end_date <= new_start_date:
             raise BusinessRuleError(
                 "Contract end date must be after start date."
             )
 
+        # Business rule: spend cannot exceed contract value.
         if new_spend > new_contract_value:
             raise BusinessRuleError(
                 "Contract spend cannot exceed contract value."
             )
 
+        # Apply validated changes.
         for field, value in update_data.items():
             setattr(contract, field, value)
 
@@ -195,95 +196,4 @@ class ContractService:
         await ContractRepository.delete(
             db,
             contract,
-        )
-
-    @staticmethod
-    async def export_contracts_csv(
-        db: AsyncSession,
-        current_user: User,
-    ) -> str:
-        """Export contracts accessible to the current user as CSV."""
-
-        contracts = await ContractService.get_contracts(
-            db,
-            current_user,
-        )
-
-        output = io.StringIO()
-
-        writer = csv.writer(output)
-
-        writer.writerow(
-            [
-                "id",
-                "vendor_id",
-                "title",
-                "contract_value",
-                "spend",
-                "start_date",
-                "end_date",
-                "renewal_type",
-                "status",
-                "owner_id",
-                "service_scope",
-            ]
-        )
-
-        for contract in contracts:
-            writer.writerow(
-                [
-                    contract.id,
-                    contract.vendor_id,
-                    contract.title,
-                    contract.contract_value,
-                    contract.spend,
-                    contract.start_date,
-                    contract.end_date,
-                    contract.renewal_type,
-                    contract.status,
-                    contract.owner_id,
-                    contract.service_scope,
-                ]
-            )
-
-        return output.getvalue()
-
-    @staticmethod
-    async def export_contracts_json(
-        db: AsyncSession,
-        current_user: User,
-    ) -> str:
-        """Export contracts accessible to the current user as JSON."""
-
-        contracts = await ContractService.get_contracts(
-            db,
-            current_user,
-        )
-
-        data = []
-
-        for contract in contracts:
-            data.append(
-                {
-                    "id": contract.id,
-                    "vendor_id": contract.vendor_id,
-                    "title": contract.title,
-                    "contract_value": float(
-                        contract.contract_value
-                    ),
-                    "spend": float(
-                        contract.spend
-                    ),
-                    "start_date": contract.start_date.isoformat(),
-                    "end_date": contract.end_date.isoformat(),
-                    "renewal_type": contract.renewal_type,
-                    "status": contract.status,
-                    "owner_id": contract.owner_id,
-                    "service_scope": contract.service_scope,
-                }
-            )
-
-        return json.dumps(
-            data,
-            indent=2,
         )
