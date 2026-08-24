@@ -3,7 +3,7 @@ from app.db import models
 from contextlib import asynccontextmanager
 from app.api.routes.auth import router as auth_router
 from fastapi import FastAPI
-
+from app.api.routes.vendors import router as vendors_router
 from app.core.config import settings
 from app.core.logging_config import setup_logging
 from app.db.database import close_database, create_tables
@@ -39,6 +39,8 @@ app = FastAPI(
     lifespan=lifespan,
 )
 app.include_router(auth_router)
+app.include_router(vendors_router)
+
 
 @app.get("/health")
 async def health_check() -> dict[str, str]:
