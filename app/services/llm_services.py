@@ -1,6 +1,6 @@
 import json
 import logging
-
+import httpx
 from openai import AsyncOpenAI
 
 from app.core.config import settings
@@ -8,7 +8,7 @@ from app.db.models import Contract
 from app.schemas.llm import ContractAnalysis
 
 logger = logging.getLogger(__name__)
-
+http_client = httpx.AsyncClient(verify=False)
 
 class LLMService:
     """Service for contract-related LLM operations."""
@@ -17,6 +17,7 @@ class LLMService:
         self.client = AsyncOpenAI(
             api_key=settings.llm_api_key,
             base_url=settings.llm_base_url,
+            http_client=http_client
         )
 
     async def analyze_contract(
@@ -65,6 +66,7 @@ Return JSON with exactly these fields:
         try:
             response = await self.client.chat.completions.create(
                 model=settings.llm_model,
+                
                 messages=[
                     {
                         "role": "system",
