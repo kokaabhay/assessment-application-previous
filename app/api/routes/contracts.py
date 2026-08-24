@@ -1,6 +1,20 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
-
+from app.services.llm_services import LLMService
+from app.schemas.llm import ContractAnalysis
+from app.core.exceptions import *
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    UploadFile,
+)
+from app.db.models import Contract, Job, User
+from app.repositories.job_repository import JobRepository
+from app.services.import_service import (
+    process_contract_import,
+)
 from app.api.dependencies import get_current_user
 from app.db.database import get_db
 from app.db.models import Contract, User
@@ -17,6 +31,53 @@ router = APIRouter(
     tags=["Contracts"],
 )
 
+
+@router.post(
+    "/import",
+    status_code=202,
+)
+async def import_contracts(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Import contracts from a CSV file."""
+
+    if not file.filename:
+        raise BusinessRuleError(
+            "A file is required."
+        )
+
+    if not file.filename.lower().endswith(".csv"):
+        raise BusinessRuleError(
+            "Only CSV files are supported."
+        )
+
+    content = await file.read()
+
+    job = Job(
+        job_type="contract_import",
+        status="queued",
+        progress=0,
+    )
+
+    job = await JobRepository.create(
+        db,
+        job,
+    )
+
+    background_tasks.add_task(
+        process_contract_import,
+        job.id,
+        content,
+        current_user.id,
+    )
+
+    return {
+        "job_id": job.id,
+        "status": job.status,
+    }
 
 @router.get(
     "",
@@ -106,4 +167,27 @@ async def delete_contract(
         db,
         contract_id,
         current_user,
+    )
+
+@router.post(
+    "/{contract_id}/analyze",
+    response_model=ContractAnalysis,
+)
+async def analyze_contract(
+    contract_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> ContractAnalysis:
+    """Analyze a contract using the LLM."""
+
+    contract = await ContractService.get_contract(
+        db,
+        contract_id,
+        current_user,
+    )
+
+    llm_service = LLMService()
+
+    return await llm_service.analyze_contract(
+        contract
     )

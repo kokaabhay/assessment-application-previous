@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from app.api.routes.vendors import router as vendors_router
 from app.core.config import settings
 from app.core.logging_config import setup_logging
+from app.api.routes.jobs import router as jobs_router
 from app.db.database import close_database, create_tables
 from app.core.exceptions import (
     BusinessRuleError,
@@ -51,6 +52,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 app.include_router(contracts_router)
+app.include_router(jobs_router)
 app.include_router(auth_router)
 app.include_router(vendors_router)
 app.add_exception_handler(
