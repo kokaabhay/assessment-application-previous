@@ -1,7 +1,7 @@
 from decimal import Decimal
 from app.core.exceptions import ResourceNotFoundError
 from sqlalchemy.ext.asyncio import AsyncSession
-
+from app.core.vendor_cache import vendor_cache
 from app.db.models import Vendor
 from app.repositories.vendor_repository import VendorRepository
 from app.schemas.vendors import (
@@ -15,10 +15,17 @@ class VendorService:
 
     @staticmethod
     async def get_vendor(
-        db: AsyncSession,
-        vendor_id: int,
-    ) -> Vendor:
-        """Get a vendor or raise an error if it doesn't exist."""
+    db: AsyncSession,
+    vendor_id: int,
+) -> Vendor:
+        """Get a vendor using the cache when available."""
+
+        cache_key = f"vendor:{vendor_id}"
+
+        cached_vendor = vendor_cache.get(cache_key)
+
+        if cached_vendor is not None:
+            return cached_vendor
 
         vendor = await VendorRepository.get_by_id(
             db,
@@ -26,7 +33,14 @@ class VendorService:
         )
 
         if vendor is None:
-            raise ResourceNotFoundError("Vendor not found.")
+            raise ResourceNotFoundError(
+                "Vendor not found."
+            )
+
+        vendor_cache.set(
+            cache_key,
+            vendor,
+        )
 
         return vendor
 
