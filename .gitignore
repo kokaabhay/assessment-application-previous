@@ -1,0 +1,28 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.env
+.streamlit/secrets.toml
+# Environment / secrets
+.env
+.env.*
+!.env.example
+# Python
+*.pyo
+# Virtual environments
+venv/
+.venv/
+# IDE
+.vscode/
+.idea/
+# Database
+*.db
+*.sqlite
+*.sqlite3
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+# Logs
+*.log
+logs/
