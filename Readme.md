@@ -1,123 +1,54 @@
-# Vendor Contract Management System
+# Customer Complaint Management System
 
-A full-stack vendor contract management application built with **FastAPI**, **SQLAlchemy**, **Pydantic**, **JWT authentication**, **LLM integration**, and **Streamlit**.
+ simplified customer complaint and escalation POC using FastAPI, SQLAlchemy, JWT authentication, background jobs, TTL caching, an optional LLM, and Streamlit.
 
-The application allows authenticated users to manage vendors and contracts, enforce ownership-based authorization, import/export contract data, and use an LLM to analyze contract risks and provide recommendations.
+## Run
 
----
+From the Application root:
 
-## Features
+if its 1st time dont forget to run 
+python -m pip install -r requirements.txt
 
-### Authentication & Authorization
+.\venv\Scripts\Activate.ps1
+python -m app.scripts.seed_demo
+python -m fastapi dev app/main.py
 
-- User registration
-- User login
-- JWT access tokens
-- Password hashing
-- Current-user endpoint
-- Role-based authorization
-- Resource ownership checks
 
-### Vendor Management
+In a 2nd terminal, from `streamlit_app`:
+run
+python -m streamlit run app.py
 
-- Create vendors
-- View vendors
-- Update vendors
-- Delete vendors
-- Vendor categories and status
-- Vendor contract relationships
-- Compliance document relationships
 
-### Contract Management
+For all demo user designations use password `Password123!`:
 
-- Create contracts
-- View contracts
-- Update contracts
-- Delete contracts
-- Ownership-based access control
-- Admin access to all contracts
-- Contract validation
-- Spend validation
-- Contract date validation
+- `admin@example.com`
+- `manager@example.com`
+- `agent@example.com`
+- `customer@example.com`
 
-### CSV / JSON
+Access swagger ui at `http://127.0.0.1:8000/docs`.
 
-- Export contracts as CSV
-- Export contracts as JSON
-- Import contract data from CSV
+ Main Features
 
-### LLM Contract Analysis
+- Customer complaint submission and authorized history.
+- Role-based customer, agent, manager, and administrator access.
+- Deterministic priority, SLA deadlines, due-soon/breached state, duplicate detection, and workflow validation.
+- Assignment, notes, escalation history, filtering, pagination. 
+- CSV import/export.
+- Tracked jobs.
+- Cached support dashboard with visible cache `MISS`/`HIT` behavior and parallel metric collection.
+- Complaint trend narrative generated from computed metrics, with a deterministic fallback when the model provider is unavailable.
 
-The application can analyze a contract using an LLM and return structured information:
+ Main API Routes
 
-- Summary
-- Risk level
-- Key risks
-- Recommendations
+- `POST /auth/register`, `POST /auth/login`, `GET /auth/me`
+- `POST /complaints`, `GET /complaints`, `GET /complaints/{id}`
+- `PATCH /complaints/{id}/assign`, `PATCH /complaints/{id}/status`
+- `POST /complaints/{id}/notes`, `POST /complaints/{id}/escalate`
+- `GET /complaint-categories`, `POST /complaint-categories`
+- `GET /analytics/support-dashboard`
+- `GET /analytics/sla-performance`, `GET /analytics/agent-ranking`
+- `POST /complaints/import-job`, `GET /complaints/export`, `GET /jobs/{job_id}`
+- `POST /ai/complaint-trend-summary`, `GET /health`
 
-The LLM is used only for contract analysis. Deterministic business rules such as date validation, spend validation, authorization, and database operations are implemented in Python/SQL.
-
-### Streamlit UI
-
-A Streamlit frontend consumes the FastAPI backend and provides a simple interface for:
-
-- Login
-- Viewing contracts
-- Creating contracts
-- Updating contracts
-- Deleting contracts
-- Exporting contract data
-- Running LLM contract analysis
-
----
-
-# Architecture
-
-The project follows a layered architecture.
-
-```text
-project application/
-│
-├── app/
-│   │
-│   ├── main.py
-│   │
-│   ├── api/
-│   │   ├── dependencies.py
-│   │   └── routes/
-│   │       ├── auth.py
-│   │       ├── contracts.py
-│   │       └── vendors.py
-│   │
-│   ├── core/
-│   │   ├── config.py
-│   │   ├── security.py
-│   │   └── exceptions.py
-│   │
-│   ├── db/
-│   │   ├── database.py
-│   │   └── models.py
-│   │
-│   ├── repositories/
-│   │   ├── contract_repository.py
-│   │   └── vendor_repository.py
-│   │
-│   ├── schemas/
-│   │   ├── auth.py
-│   │   ├── contracts.py
-│   │   ├── vendors.py
-│   │   └── llm.py
-│   │
-│   ├── services/
-│   │   ├── contract_service.py
-│   │   ├── vendor_service.py
-│   │   └── llm_services.py
-│   │
-│   └── scripts/
-│       └── create_admin.py
-│
-├── streamlit_app.py
-├── .env
-├── .env.example
-├── requirements.txt
-└── README.md
+All business data is accessed by Streamlit through FastAPI. The active application exposes only customer and complaint functionality.

@@ -19,6 +19,7 @@ class AuthService:
         db: AsyncSession,
         email: str,
         password: str,
+        role: str = "CUSTOMER",
     ) -> User:
         """
         Register a new application user.
@@ -40,7 +41,7 @@ class AuthService:
         user = User(
             email=email,
             password_hash=hash_password(password),
-            role=AuthService.DEFAULT_ROLE,
+            role=role.upper(),
             category=None,
             is_active=True,
         )

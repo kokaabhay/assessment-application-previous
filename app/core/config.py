@@ -1,10 +1,9 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
-import os
 
 class Settings(BaseSettings):
     """Application configuration loaded from environment variables."""
 
-    app_name: str = "Vendor Contract Management API"
+    app_name: str = "Customer Complaint Management API"
     app_version: str = "1.0.0"
     debug: bool = False
 

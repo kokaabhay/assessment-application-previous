@@ -11,6 +11,8 @@ class RegisterRequest(BaseModel):
         max_length=128,
     )
 
+    role: str = Field(default="CUSTOMER", pattern="^(ADMIN|SUPPORT_MANAGER|SUPPORT_AGENT|CUSTOMER|admin|user)$")
+
 
 class LoginRequest(BaseModel):
     """Request payload for authenticating a user."""

@@ -35,6 +35,7 @@ async def register(
             db=db,
             email=str(request.email),
             password=request.password,
+            role=request.role,
         )
 
     except ValueError as exc:

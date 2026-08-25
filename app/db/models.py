@@ -1,14 +1,11 @@
-from datetime import date, datetime
-from decimal import Decimal
+from datetime import datetime
 
 from sqlalchemy import (
     Boolean,
-    Date,
     DateTime,
     ForeignKey,
     Index,
     Integer,
-    Numeric,
     String,
     Text,
 )
@@ -56,177 +53,9 @@ class User(Base):
         nullable=False,
     )
 
-    contracts: Mapped[list["Contract"]] = relationship(
-        back_populates="owner",
-    )
-
-
-class Vendor(Base):
-    """Vendor registered in the procurement system."""
-
-    __tablename__ = "vendors"
-
-    id: Mapped[int] = mapped_column(
-        Integer,
-        primary_key=True,
-        autoincrement=True,
-    )
-
-    name: Mapped[str] = mapped_column(
-        String(255),
-        nullable=False,
-        index=True,
-    )
-
-    category: Mapped[str] = mapped_column(
-        String(100),
-        nullable=False,
-        index=True,
-    )
-
-    contact_email: Mapped[str] = mapped_column(
-        String(255),
-        nullable=False,
-    )
-
-    status: Mapped[str] = mapped_column(
-        String(50),
-        nullable=False,
-        index=True,
-    )
-
-    onboarded_at: Mapped[datetime] = mapped_column(
-        DateTime,
-        nullable=False,
-    )
-
-    annual_budget_cap: Mapped[Decimal] = mapped_column(
-        Numeric(15, 2),
-        nullable=False,
-        default=Decimal("0.00"),
-    )
-
-    contracts: Mapped[list["Contract"]] = relationship(
-        back_populates="vendor",
-        cascade="all, delete-orphan",
-    )
-
-    compliance_documents: Mapped[list["ComplianceDocument"]] = relationship(
-        back_populates="vendor",
-        cascade="all, delete-orphan",
-    )
-
-
-class Contract(Base):
-    """Contract belonging to a vendor."""
-
-    __tablename__ = "contracts"
-
-    id: Mapped[int] = mapped_column(
-        Integer,
-        primary_key=True,
-        autoincrement=True,
-    )
-
-    vendor_id: Mapped[int] = mapped_column(
-        ForeignKey("vendors.id"),
-        nullable=False,
-        index=True,
-    )
-
-    title: Mapped[str] = mapped_column(
-        String(255),
-        nullable=False,
-    )
-
-    contract_value: Mapped[Decimal] = mapped_column(
-        Numeric(15, 2),
-        nullable=False,
-    )
-
-    spend: Mapped[Decimal] = mapped_column(
-        Numeric(15, 2),
-        nullable=False,
-        default=Decimal("0.00"),
-    )
-
-    start_date: Mapped[date] = mapped_column(
-        Date,
-        nullable=False,
-    )
-
-    end_date: Mapped[date] = mapped_column(
-        Date,
-        nullable=False,
-        index=True,
-    )
-
-    renewal_type: Mapped[str] = mapped_column(
-        String(50),
-        nullable=False,
-    )
-
-    status: Mapped[str] = mapped_column(
-        String(50),
-        nullable=False,
-        index=True,
-    )
-
-    owner_id: Mapped[int] = mapped_column(
-        ForeignKey("users.id"),
-        nullable=False,
-        index=True,
-    )
-
-    service_scope: Mapped[str | None] = mapped_column(
-        String(255),
-        nullable=True,
-    )
-
-    vendor: Mapped["Vendor"] = relationship(
-        back_populates="contracts",
-    )
-
-    owner: Mapped["User"] = relationship(
-        back_populates="contracts",
-    )
-
-
-class ComplianceDocument(Base):
-    """Compliance document associated with a vendor."""
-
-    __tablename__ = "compliance_documents"
-
-    id: Mapped[int] = mapped_column(
-        Integer,
-        primary_key=True,
-        autoincrement=True,
-    )
-
-    vendor_id: Mapped[int] = mapped_column(
-        ForeignKey("vendors.id"),
-        nullable=False,
-        index=True,
-    )
-
-    document_type: Mapped[str] = mapped_column(
-        String(100),
-        nullable=False,
-    )
-
-    is_valid: Mapped[bool] = mapped_column(
-        Boolean,
-        default=True,
-        nullable=False,
-    )
-
-    expires_at: Mapped[date | None] = mapped_column(
-        Date,
-        nullable=True,
-    )
-
-    vendor: Mapped["Vendor"] = relationship(
-        back_populates="compliance_documents",
+    complaints: Mapped[list["Complaint"]] = relationship(
+        back_populates="customer",
+        foreign_keys="Complaint.customer_id",
     )
 
 
@@ -291,14 +120,83 @@ class Job(Base):
     )
 
 
-Index(
-    "ix_contract_vendor_end_date",
-    Contract.vendor_id,
-    Contract.end_date,
-)
+class SupportTeam(Base):
+    """A support queue that can own complaints."""
 
-Index(
-    "ix_contract_vendor_status",
-    Contract.vendor_id,
-    Contract.status,
-)
+    __tablename__ = "support_teams"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+
+
+class ComplaintCategory(Base):
+    """Configurable complaint category and default SLA."""
+
+    __tablename__ = "complaint_categories"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    default_sla_hours: Mapped[int] = mapped_column(Integer, default=48, nullable=False)
+
+
+class Complaint(Base):
+    """Customer complaint with deterministic workflow and SLA fields."""
+
+    __tablename__ = "complaints"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    customer_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    product_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    category: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    channel: Mapped[str] = mapped_column(String(30), nullable=False, default="web")
+    subject: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    priority: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, index=True, default="NEW")
+    assigned_team_id: Mapped[int | None] = mapped_column(ForeignKey("support_teams.id"), index=True)
+    assigned_agent_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+    sla_due_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime)
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime)
+    first_response_at: Mapped[datetime | None] = mapped_column(DateTime)
+    duplicate_of_id: Mapped[int | None] = mapped_column(ForeignKey("complaints.id"), nullable=True)
+
+    customer: Mapped["User"] = relationship(foreign_keys=[customer_id], back_populates="complaints")
+    assigned_agent: Mapped["User | None"] = relationship(foreign_keys=[assigned_agent_id])
+    notes: Mapped[list["ComplaintNote"]] = relationship(back_populates="complaint", cascade="all, delete-orphan")
+    escalations: Mapped[list["Escalation"]] = relationship(back_populates="complaint", cascade="all, delete-orphan")
+
+
+class ComplaintNote(Base):
+    """Internal or customer-visible complaint timeline entry."""
+
+    __tablename__ = "complaint_notes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    complaint_id: Mapped[int] = mapped_column(ForeignKey("complaints.id"), nullable=False, index=True)
+    author_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    visibility: Mapped[str] = mapped_column(String(20), nullable=False, default="customer")
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+    complaint: Mapped["Complaint"] = relationship(back_populates="notes")
+
+
+class Escalation(Base):
+    """Escalation history for a complaint."""
+
+    __tablename__ = "escalations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    complaint_id: Mapped[int] = mapped_column(ForeignKey("complaints.id"), nullable=False, index=True)
+    level: Mapped[int] = mapped_column(Integer, nullable=False)
+    reason: Mapped[str] = mapped_column(String(255), nullable=False)
+    escalated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+    escalated_by: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    assigned_to: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime)
+    complaint: Mapped["Complaint"] = relationship(back_populates="escalations")
+
+
+Index("ix_complaint_filter", Complaint.customer_id, Complaint.status, Complaint.priority)
+Index("ix_complaint_sla", Complaint.sla_due_at, Complaint.status)
