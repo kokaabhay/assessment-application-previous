@@ -21,8 +21,8 @@ class LLMService:
         """Generate plain text for computed support metrics."""
         response = await self.client.chat.completions.create(
             model=settings.llm_model,
-            messages=[{"role": "system", "content": "You are a concise support operations analyst."}, {"role": "user", "content": prompt}],
+            messages=[{"role": "system", "content": "You are a concise support operations analyst. Don't provide made up info only provide existing ones"}, {"role": "user", "content": prompt}],
             temperature=0,
         )
-        return response.choices[0].message.content or "No summary returned."
+        return response.choices[0].message.content or "Currently no summary has returned."
 

@@ -51,4 +51,4 @@ Access swagger ui at `http://127.0.0.1:8000/docs`.
 - `POST /complaints/import-job`, `GET /complaints/export`, `GET /jobs/{job_id}`
 - `POST /ai/complaint-trend-summary`, `GET /health`
 
-All business data is accessed by Streamlit through FastAPI. The active application exposes only customer and complaint functionality.
+All business data can be accessed via Streamlit using the FastAPI backend. 
