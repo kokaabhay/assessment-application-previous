@@ -11,6 +11,7 @@ class JobResponse(BaseModel):
     finished_at: datetime | None
     accepted_count: int
     rejected_count: int
+    result: str | None
     error: str | None
 
     model_config = {

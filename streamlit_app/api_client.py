@@ -82,6 +82,16 @@ class APIClient:
         response.raise_for_status()
         return response.json()
 
+    def get_support_agents(self) -> list[dict[str, Any]]:
+        """Get active support agents and their open complaint workloads."""
+        response = requests.get(
+            f"{self.base_url}/support-agents",
+            headers=self._headers(),
+            timeout=30,
+        )
+        response.raise_for_status()
+        return response.json()
+
     def create_complaint(self, data: dict[str, Any]) -> dict[str, Any]:
         """Submit a complaint through the FastAPI service."""
         response = requests.post(f"{self.base_url}/complaints", headers=self._headers(), json=data, timeout=30)
@@ -93,8 +103,87 @@ class APIClient:
         response.raise_for_status()
         return response.json()
 
+    def assign_complaint(
+        self,
+        complaint_id: int,
+        assigned_agent_id: int | None,
+        assigned_team_id: int | None = None,
+    ) -> dict[str, Any]:
+        """Assign a complaint to a support team or agent."""
+        response = requests.patch(
+            f"{self.base_url}/complaints/{complaint_id}/assign",
+            headers=self._headers(),
+            json={
+                "assigned_agent_id": assigned_agent_id,
+                "assigned_team_id": assigned_team_id,
+            },
+            timeout=30,
+        )
+        response.raise_for_status()
+        return response.json()
+
+    def add_note(
+        self,
+        complaint_id: int,
+        text: str,
+        visibility: str = "customer",
+    ) -> dict[str, Any]:
+        """Add a customer-visible or internal complaint note."""
+        response = requests.post(
+            f"{self.base_url}/complaints/{complaint_id}/notes",
+            headers=self._headers(),
+            json={
+                "text": text,
+                "visibility": visibility,
+            },
+            timeout=30,
+        )
+        response.raise_for_status()
+        return response.json()
+
+    def escalate_complaint(
+        self,
+        complaint_id: int,
+        level: int,
+        reason: str,
+        assigned_to: int | None = None,
+    ) -> dict[str, Any]:
+        """Escalate a complaint through the backend workflow."""
+        response = requests.post(
+            f"{self.base_url}/complaints/{complaint_id}/escalate",
+            headers=self._headers(),
+            json={
+                "level": level,
+                "reason": reason,
+                "assigned_to": assigned_to,
+            },
+            timeout=30,
+        )
+        response.raise_for_status()
+        return response.json()
+
     def get_support_dashboard(self) -> dict[str, Any]:
         response = requests.get(f"{self.base_url}/analytics/support-dashboard", headers=self._headers(), timeout=30)
+        response.raise_for_status()
+        return response.json()
+
+    def get_sla_performance(self) -> list[dict[str, Any]]:
+        """Get SLA performance grouped by category."""
+        response = requests.get(
+            f"{self.base_url}/analytics/sla-performance",
+            headers=self._headers(),
+            timeout=30,
+        )
+        response.raise_for_status()
+        return response.json()
+
+    def get_agent_ranking(self) -> list[dict[str, Any]]:
+        """Get manager/admin agent ranking report."""
+        response = requests.get(
+            f"{self.base_url}/analytics/agent-ranking",
+            headers=self._headers(),
+            timeout=30,
+        )
         response.raise_for_status()
         return response.json()
 
@@ -104,11 +193,12 @@ class APIClient:
         return response.json()
 
     def import_complaints(self, file_bytes: bytes, filename: str) -> dict[str, Any]:
-        response = requests.post(f"{self.base_url}/complaints/import-job", headers=self._headers(), files={"file": (filename, file_bytes, "text/csv")}, timeout=60)
+        media_type = "application/json" if filename.lower().endswith(".json") else "text/csv"
+        response = requests.post(f"{self.base_url}/complaints/import-job", headers=self._headers(), files={"file": (filename, file_bytes, media_type)}, timeout=60)
         response.raise_for_status()
         return response.json()
 
-    def export_complaints(self) -> requests.Response:
-        response = requests.get(f"{self.base_url}/complaints/export", headers=self._headers(), timeout=60)
+    def export_complaints(self, file_format: str = "csv") -> requests.Response:
+        response = requests.get(f"{self.base_url}/complaints/export", headers=self._headers(), params={"format": file_format}, timeout=60)
         response.raise_for_status()
         return response

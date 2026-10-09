@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
-from jose import JWTError, jwt
+from jose import jwt
 from pwdlib import PasswordHash
 
 from app.core.config import settings
@@ -73,18 +73,6 @@ def create_access_token(
 def decode_access_token(token: str) -> dict:
     """
     Decode and validate a JWT access token.
-    """
-
-    return jwt.decode(
-        token,
-        settings.jwt_secret_key,
-        algorithms=[settings.jwt_algorithm],
-    )
-
-
-def decode_access_token(token: str) -> dict:
-    """
-    Decode and validate a JWT access token.
 
     Args:
         token: JWT token.
@@ -97,7 +85,7 @@ def decode_access_token(token: str) -> dict:
     """
 
     return jwt.decode(
-    token,
-    settings.jwt_secret_key,
-    algorithms=[settings.jwt_algorithm],
-)
+        token,
+        settings.jwt_secret_key,
+        algorithms=[settings.jwt_algorithm],
+    )

@@ -1,9 +1,10 @@
+import logging
 import time
 from dataclasses import dataclass
 from typing import Any
-import logging
 
 logger = logging.getLogger(__name__)
+
 
 @dataclass
 class CacheEntry:
@@ -19,20 +20,6 @@ class TTLCache:
     def __init__(self, ttl_seconds: int = 60) -> None:
         self._ttl_seconds = ttl_seconds
         self._data: dict[str, CacheEntry] = {}
-
-    def get(self, key: str) -> Any | None:
-        """Return cached value if present and not expired."""
-
-        entry = self._data.get(key)
-
-        if entry is None:
-            return None
-
-        if time.monotonic() >= entry.expires_at:
-            del self._data[key]
-            return None
-
-        return entry.value
 
     def set(
         self,

@@ -6,13 +6,13 @@ import logging
 from datetime import datetime
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Query, UploadFile, status
-from fastapi.responses import Response
-from sqlalchemy import select
+from fastapi.responses import JSONResponse, Response
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.api.dependencies import get_current_user, require_roles
-from app.core.exceptions import BusinessRuleError, ResourceNotFoundError
-from app.core.cache import TTLCache
+from app.core.exceptions import BusinessRuleError
 from app.db.database import AsyncSessionLocal, get_db
 from app.db.models import Complaint, ComplaintCategory, ComplaintNote, Escalation, Job, User
 from app.repositories.job_repository import JobRepository
@@ -34,8 +34,19 @@ def response_for(complaint: Complaint) -> ComplaintResponse:
             "description", "priority", "status", "assigned_team_id", "assigned_agent_id",
             "created_at", "sla_due_at", "resolved_at", "closed_at", "duplicate_of_id",
         )},
+        "assigned_agent_email": complaint.assigned_agent.email if complaint.assigned_agent else None,
         "sla_state": ComplaintService.sla_state(complaint),
     })
+
+
+def scoped_complaint_query(user: User):
+    """Build the base complaint query visible to the current role."""
+    query = select(Complaint).options(selectinload(Complaint.assigned_agent))
+    if user.role.upper() == "CUSTOMER":
+        return query.where(Complaint.customer_id == user.id)
+    if user.role.upper() == "SUPPORT_AGENT":
+        return query.where(Complaint.assigned_agent_id == user.id)
+    return query
 
 
 @router.post("/complaints", response_model=ComplaintResponse, status_code=status.HTTP_201_CREATED)
@@ -51,11 +62,7 @@ async def list_complaints(
     page: int = Query(1, ge=1), page_size: int = Query(50, ge=1, le=200),
     user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db),
 ) -> list[ComplaintResponse]:
-    query = select(Complaint).order_by(Complaint.created_at.desc()).offset((page - 1) * page_size).limit(page_size)
-    if user.role.upper() == "CUSTOMER":
-        query = query.where(Complaint.customer_id == user.id)
-    elif user.role.upper() == "SUPPORT_AGENT":
-        query = query.where(Complaint.assigned_agent_id == user.id)
+    query = scoped_complaint_query(user).order_by(Complaint.created_at.desc()).offset((page - 1) * page_size).limit(page_size)
     if status_filter: query = query.where(Complaint.status == status_filter.upper())
     if category: query = query.where(Complaint.category == category)
     if priority: query = query.where(Complaint.priority == priority.upper())
@@ -63,12 +70,69 @@ async def list_complaints(
     return [response_for(item) for item in (await db.scalars(query)).all()]
 
 
+@router.get("/support-agents")
+async def list_support_agents(
+    user: User = Depends(require_roles("ADMIN", "SUPPORT_MANAGER", "admin")),
+    db: AsyncSession = Depends(get_db),
+) -> list[dict]:
+    """Return active agents with their current open-complaint workload."""
+    agents = list((await db.scalars(
+        select(User).where(
+            User.role.in_(["SUPPORT_AGENT", "support_agent"]),
+            User.is_active.is_(True),
+        ).order_by(User.email)
+    )).all())
+    complaints = list((await db.scalars(
+        select(Complaint).where(Complaint.status.notin_(["RESOLVED", "CLOSED"]))
+    )).all())
+    workloads = {
+        agent.id: sum(complaint.assigned_agent_id == agent.id for complaint in complaints)
+        for agent in agents
+    }
+    return [
+        {"id": agent.id, "email": agent.email, "open_complaints": workloads[agent.id]}
+        for agent in agents
+    ]
+
+
 @router.get("/complaints/export")
-async def export_complaints(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> Response:
-    complaints = list((await db.scalars(select(Complaint))).all())
+async def export_complaints(
+    export_format: str = Query("csv", alias="format", pattern="^(csv|json)$"),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    complaints = list((await db.scalars(scoped_complaint_query(user))).all())
+    records = [
+        {
+            "id": item.id,
+            "customer_id": item.customer_id,
+            "product_id": item.product_id,
+            "category": item.category,
+            "channel": item.channel,
+            "subject": item.subject,
+            "description": item.description,
+            "priority": item.priority,
+            "status": item.status,
+            "assigned_team_id": item.assigned_team_id,
+            "assigned_agent_id": item.assigned_agent_id,
+            "created_at": item.created_at.isoformat(),
+            "sla_due_at": item.sla_due_at.isoformat(),
+            "resolved_at": item.resolved_at.isoformat() if item.resolved_at else None,
+            "closed_at": item.closed_at.isoformat() if item.closed_at else None,
+            "duplicate_of_id": item.duplicate_of_id,
+            "sla_state": ComplaintService.sla_state(item),
+        }
+        for item in complaints
+    ]
+    if export_format == "json":
+        return JSONResponse(
+            {"count": len(records), "complaints": records},
+            headers={"Content-Disposition": "attachment; filename=complaints.json"},
+        )
     output = io.StringIO(); writer = csv.writer(output)
     writer.writerow(["id", "customer_id", "product_id", "category", "priority", "status", "created_at", "sla_due_at"])
-    for item in complaints: writer.writerow([item.id, item.customer_id, item.product_id, item.category, item.priority, item.status, item.created_at.isoformat(), item.sla_due_at.isoformat()])
+    for item in complaints:
+        writer.writerow([item.id, item.customer_id, item.product_id, item.category, item.priority, item.status, item.created_at.isoformat(), item.sla_due_at.isoformat()])
     return Response(output.getvalue(), media_type="text/csv", headers={"Content-Disposition": "attachment; filename=complaints.csv"})
 
 
@@ -86,6 +150,14 @@ async def update_status(complaint_id: int, data: ComplaintStatusUpdate, user: Us
 @router.patch("/complaints/{complaint_id}/assign", response_model=ComplaintResponse)
 async def assign_complaint(complaint_id: int, data: ComplaintAssignment, user: User = Depends(require_roles("ADMIN", "SUPPORT_MANAGER", "admin")), db: AsyncSession = Depends(get_db)) -> ComplaintResponse:
     complaint = await ComplaintService.get(db, complaint_id, user)
+    if data.assigned_agent_id is not None:
+        assigned_agent = await db.get(User, data.assigned_agent_id)
+        if (
+            assigned_agent is None
+            or assigned_agent.role.upper() != "SUPPORT_AGENT"
+            or not assigned_agent.is_active
+        ):
+            raise BusinessRuleError("Assigned agent must be an active support agent.")
     complaint.assigned_team_id, complaint.assigned_agent_id = data.assigned_team_id, data.assigned_agent_id
     if complaint.status == "NEW": complaint.status = "ASSIGNED"
     await db.commit(); await db.refresh(complaint)
@@ -129,6 +201,9 @@ async def list_categories(user: User = Depends(get_current_user), db: AsyncSessi
 
 @router.get("/analytics/support-dashboard")
 async def support_dashboard(user: User = Depends(get_current_user)) -> dict:
+    async with AsyncSessionLocal() as db:
+        await ComplaintService.auto_escalate_breaches(db)
+
     async def read_metrics() -> dict:
         async with AsyncSessionLocal() as db: return await ComplaintService.metrics(db, user)
     async def read_open() -> int:
@@ -141,6 +216,7 @@ async def support_dashboard(user: User = Depends(get_current_user)) -> dict:
 
 @router.get("/analytics/sla-performance")
 async def sla_performance(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> list[dict]:
+    await ComplaintService.auto_escalate_breaches(db)
     complaints = list((await db.scalars(select(Complaint))).all())
     groups: dict[str, list[Complaint]] = {}
     for complaint in complaints: groups.setdefault(complaint.category, []).append(complaint)
@@ -166,21 +242,44 @@ async def complaint_trend(data: TrendRequest, user: User = Depends(require_roles
     return await ComplaintService.trend(db, user, data.instruction)
 
 
-async def process_complaint_import(job_id: int, content: bytes, customer_id: int) -> None:
+def parse_import_rows(content: bytes, filename: str) -> list[dict]:
+    """Parse CSV or JSON complaint import content into row dictionaries."""
+    if filename.lower().endswith(".json"):
+        payload = json.loads(content.decode("utf-8-sig"))
+        if isinstance(payload, dict):
+            payload = payload.get("complaints", [])
+        if not isinstance(payload, list):
+            raise ValueError("JSON import must be a list or an object with a complaints list.")
+        return [item if isinstance(item, dict) else {"__raw__": item} for item in payload]
+    return list(csv.DictReader(io.StringIO(content.decode("utf-8-sig"))))
+
+
+async def process_complaint_import(job_id: int, content: bytes, filename: str, customer_id: int) -> None:
     async with AsyncSessionLocal() as db:
         job = await db.get(Job, job_id)
         if not job: return
         try:
+            importer = await db.get(User, customer_id)
+            if importer is None:
+                raise ValueError("Importing user was not found.")
             job.status, job.started_at = "RUNNING", datetime.utcnow(); await db.commit()
-            rows = list(csv.DictReader(io.StringIO(content.decode("utf-8-sig"))))
+            rows = parse_import_rows(content, filename)
+            accepted: list[dict] = []
+            rejected: list[dict] = []
             for index, row in enumerate(rows, 1):
                 try:
-                    await ComplaintService.create(db, ComplaintCreate.model_validate(row), await db.get(User, customer_id))
+                    complaint = await ComplaintService.create(db, ComplaintCreate.model_validate(row), importer)
                     job.accepted_count += 1
+                    accepted.append({"row": index, "complaint_id": complaint.id})
                 except Exception as exc:
-                    job.rejected_count += 1; logger.warning("Rejected complaint import row %s: %s", index, exc)
+                    reason = str(exc)
+                    job.rejected_count += 1
+                    rejected.append({"row": index, "reason": reason, "data": row})
+                    logger.warning("Rejected complaint import row %s: %s", index, exc)
                 job.progress = int(index / max(len(rows), 1) * 100); await db.commit()
-            job.status, job.finished_at, job.progress = "COMPLETED", datetime.utcnow(), 100; await db.commit()
+            job.status, job.finished_at, job.progress = "COMPLETED", datetime.utcnow(), 100
+            job.result = json.dumps({"accepted": accepted, "rejected": rejected})
+            await db.commit()
         except Exception as exc:
             job.status, job.error, job.finished_at = "FAILED", str(exc), datetime.utcnow(); await db.commit()
 
@@ -188,6 +287,6 @@ async def process_complaint_import(job_id: int, content: bytes, customer_id: int
 @router.post("/complaints/import-job", status_code=202)
 async def import_job(background_tasks: BackgroundTasks, file: UploadFile = File(...), user: User = Depends(require_roles("ADMIN", "SUPPORT_MANAGER", "admin")), db: AsyncSession = Depends(get_db)) -> dict:
     job = await JobRepository.create(db, Job(job_type="complaint_import", status="PENDING", progress=0))
-    background_tasks.add_task(process_complaint_import, job.id, await file.read(), user.id)
+    background_tasks.add_task(process_complaint_import, job.id, await file.read(), file.filename or "complaints.csv", user.id)
     return {"job_id": job.id, "status": job.status}
 

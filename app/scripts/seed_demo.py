@@ -1,10 +1,8 @@
-"""Seed a small, repeatable complaint-management demonstration dataset."""
+#Seed a small, repeatable complaint-management demonstration dataset.
 
 import asyncio
 from datetime import datetime, timedelta
-
 from sqlalchemy import select
-
 from app.core.security import hash_password
 from app.db.database import AsyncSessionLocal, create_tables
 from app.db.models import Complaint, ComplaintCategory, SupportTeam, User

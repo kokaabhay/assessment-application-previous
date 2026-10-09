@@ -1,3 +1,6 @@
+from typing import Any
+
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
@@ -16,6 +19,14 @@ class Settings(BaseSettings):
     llm_api_key: str
     llm_base_url: str
     llm_model: str
+
+    @field_validator("debug", mode="before")
+    @classmethod
+    def parse_debug(cls, value: Any) -> Any:
+        """Accept deployment-style debug labels in addition to booleans."""
+        if isinstance(value, str) and value.lower() in {"release", "prod", "production"}:
+            return False
+        return value
 
     model_config = SettingsConfigDict(
         env_file=".env",

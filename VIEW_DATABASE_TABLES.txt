@@ -1,0 +1,78 @@
+CUSTOMER COMPLAINT MANAGEMENT SYSTEM
+DATABASE TABLE VIEW COMMANDS
+=============================
+
+Run all commands from the repository root:
+C:\Users\AbhayKoka\assesment application
+
+Activate the virtual environment first:
+
+.\venv\Scripts\Activate.ps1
+
+The database file is:
+
+complaints.db
+
+1. LIST ALL TABLES
+
+python -c "import sqlite3; c=sqlite3.connect('complaints.db'); print('\n'.join(r[0] for r in c.execute(\"SELECT name FROM sqlite_master WHERE type='table' ORDER BY name\")))"
+
+2. VIEW USERS
+
+python -c "import sqlite3; c=sqlite3.connect('complaints.db'); print(*c.execute('SELECT id,email,role,is_active FROM users ORDER BY id'), sep='\n')"
+
+3. VIEW JOBS
+
+python -c "import sqlite3; c=sqlite3.connect('complaints.db'); print(*c.execute('SELECT id,job_type,status,progress,accepted_count,rejected_count,started_at,finished_at,error FROM jobs ORDER BY id'), sep='\n')"
+
+4. VIEW SUPPORT TEAMS
+
+python -c "import sqlite3; c=sqlite3.connect('complaints.db'); print(*c.execute('SELECT id,name FROM support_teams ORDER BY id'), sep='\n')"
+
+5. VIEW COMPLAINT CATEGORIES AND SLA HOURS
+
+python -c "import sqlite3; c=sqlite3.connect('complaints.db'); print(*c.execute('SELECT id,name,default_sla_hours FROM complaint_categories ORDER BY id'), sep='\n')"
+
+6. VIEW COMPLAINTS
+
+python -c "import sqlite3; c=sqlite3.connect('complaints.db'); print(*c.execute('SELECT id,customer_id,product_id,category,channel,subject,priority,status,assigned_team_id,assigned_agent_id,created_at,sla_due_at,resolved_at,closed_at,duplicate_of_id FROM complaints ORDER BY id'), sep='\n')"
+
+7. VIEW COMPLAINT NOTES
+
+python -c "import sqlite3; c=sqlite3.connect('complaints.db'); print(*c.execute('SELECT id,complaint_id,author_id,visibility,text,created_at FROM complaint_notes ORDER BY id'), sep='\n')"
+
+8. VIEW ESCALATIONS
+
+python -c "import sqlite3; c=sqlite3.connect('complaints.db'); print(*c.execute('SELECT id,complaint_id,level,reason,escalated_at,escalated_by,assigned_to,resolved_at FROM escalations ORDER BY id'), sep='\n')"
+
+9. COUNT ROWS IN EVERY TABLE
+
+python -c "import sqlite3; c=sqlite3.connect('complaints.db'); tables=['users','jobs','support_teams','complaint_categories','complaints','complaint_notes','escalations']; print(*[(t,c.execute('SELECT COUNT(*) FROM '+t).fetchone()[0]) for t in tables], sep='\n')"
+
+10. VIEW COMPLAINTS WITH CUSTOMER AND AGENT EMAILS
+
+python -c "import sqlite3; c=sqlite3.connect('complaints.db'); q='SELECT c.id,c.subject,cu.email AS customer,aa.email AS assigned_agent,c.status,c.priority FROM complaints c JOIN users cu ON cu.id=c.customer_id LEFT JOIN users aa ON aa.id=c.assigned_agent_id ORDER BY c.id'; print(*c.execute(q), sep='\n')"
+
+11. VIEW OPEN COMPLAINT WORKLOAD BY AGENT
+
+python -c "import sqlite3; c=sqlite3.connect('complaints.db'); q=\"SELECT u.id,u.email,COUNT(c.id) AS open_complaints FROM users u LEFT JOIN complaints c ON c.assigned_agent_id=u.id AND c.status NOT IN ('RESOLVED','CLOSED') WHERE u.role='SUPPORT_AGENT' GROUP BY u.id,u.email ORDER BY open_complaints DESC\"; print(*c.execute(q), sep='\n')"
+
+12. VIEW DATABASE SCHEMA
+
+python -c "import sqlite3; c=sqlite3.connect('complaints.db'); print(*c.execute(\"SELECT name,sql FROM sqlite_master WHERE type IN ('table','index') ORDER BY type,name\"), sep='\n\n')"
+
+13. OPEN SQLITE INTERACTIVE MODE, IF SQLITE3 IS INSTALLED
+
+sqlite3 complaints.db
+
+Inside SQLite:
+.tables
+.schema complaints
+SELECT * FROM complaints;
+.quit
+
+Notes:
+- The application uses SQLAlchemy models to create and access these tables.
+- Run the commands from the repository root so complaints.db is found.
+- Do not run DELETE commands unless you intentionally want to remove data.
+- The database source of truth is complaints.db, not Streamlit.

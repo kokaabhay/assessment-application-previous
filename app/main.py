@@ -2,7 +2,8 @@ import logging
 from app.db import models
 from contextlib import asynccontextmanager
 from app.api.routes.auth import router as auth_router
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from app.core.config import settings
 from app.core.logging_config import setup_logging
 from app.api.routes.jobs import router as jobs_router
@@ -15,8 +16,11 @@ from app.core.exceptions import (
 )
 from app.core.exception_handlers import (
     business_rule_handler,
+    http_exception_handler,
     resource_conflict_handler,
     resource_not_found_handler,
+    unhandled_exception_handler,
+    validation_exception_handler,
 )
 from app.core.exceptions import ForbiddenError
 from app.core.exception_handlers import forbidden_handler
@@ -69,6 +73,9 @@ app.add_exception_handler(
     ForbiddenError,
     forbidden_handler,
 )
+app.add_exception_handler(HTTPException, http_exception_handler)
+app.add_exception_handler(RequestValidationError, validation_exception_handler)
+app.add_exception_handler(Exception, unhandled_exception_handler)
 
 @app.get("/health")
 async def health_check() -> dict[str, str]:

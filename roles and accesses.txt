@@ -1,0 +1,89 @@
+CUSTOMER COMPLAINT MANAGEMENT SYSTEM
+
+
+Roles
+
+1. CUSTOMER
+
+Can:
+- Create complaints for their own customer account.
+- View their own complaints and complaint details.
+- View the support dashboard metrics for their own visible complaints.
+- View complaint categories.
+- Add notes to their own complaints.
+- Close or reopen their own complaints when the workflow allows it.
+- Export the complaints visible through the export endpoint.
+
+Cannot:
+- View another customer's complaints through the complaint list.
+- Assign complaints.
+- Escalate complaints.
+- Create or manage complaint categories.
+- Import complaint data.
+- Generate manager/agent trend summaries.
+
+2. SUPPORT_AGENT
+
+Can:
+- View the support dashboard.
+- View complaint categories.
+- View complaints in the complaint list that are assigned to them.
+- View complaint details.
+- Add notes to complaints assigned to them.
+- Update status for complaints assigned to them when the workflow transition is valid.
+- Export complaint data allowed by the API.
+- Generate a complaint trend summary.
+
+Cannot:
+- Assign complaints to teams or agents.
+- Escalate complaints.
+- Create or manage complaint categories.
+- Import complaint data.
+- Modify complaints outside their assignment.
+
+3. SUPPORT_MANAGER
+
+Can:
+- View the organization complaint queue.
+- View complaint details and the support dashboard.
+- Assign complaints to support teams and agents.
+- Update complaint status when the workflow transition is valid.
+- Add complaint notes.
+- Escalate complaints from level 1 to level 3.
+- Create complaint import jobs.
+- Export complaints as CSV.
+- View SLA performance.
+- View agent ranking analytics.
+- Generate complaint trend summaries.
+- View complaint categories.
+
+4. ADMIN
+
+Can:
+- Perform all manager actions.
+- Create complaint categories and configure their default SLA hours.
+- View organization-wide complaints and analytics.
+- Assign, update, and escalate any complaint.
+- Start complaint import jobs.
+- Export complaints.
+- Generate complaint trend summaries.
+- Manage users through the existing authentication/admin tooling.
+
+Complaint Workflow
+------------------
+The supported status flow is:
+NEW -> ASSIGNED -> IN_PROGRESS -> RESOLVED -> CLOSED
+
+REOPENED is allowed from RESOLVED or CLOSED, then:
+REOPENED -> IN_PROGRESS
+
+Invalid status transitions are rejected by the API.
+Priority, SLA deadlines, duplicate detection, and SLA state are calculated by Python code.
+
+
+
+Frontend
+--------
+The Streamlit application uses FastAPI for all business data.
+It provides login, dashboard, complaint submission/history, import/export,
+and complaint trend summary actions.

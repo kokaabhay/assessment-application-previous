@@ -11,11 +11,11 @@ from app.db.models import User
 from app.repositories.user_repository import UserRepository
 
 
-bearer_scheme = HTTPBearer()
+bearer_scheme = HTTPBearer(auto_error=False)
 
 
 async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(
+    credentials: HTTPAuthorizationCredentials | None = Depends(
         bearer_scheme
     ),
     db: AsyncSession = Depends(get_db),
@@ -29,6 +29,9 @@ async def get_current_user(
             "WWW-Authenticate": "Bearer",
         },
     )
+
+    if credentials is None:
+        raise credentials_exception
 
     token = credentials.credentials
 

@@ -1,0 +1,306 @@
+CUSTOMER COMPLAINT MANAGEMENT SYSTEM
+TECHNICAL FORMULAS AND CALCULATIONS
+====================================
+
+This document describes the deterministic calculations used by the application.
+The LLM does not calculate priority, SLA, escalation, duplicates, or analytics.
+
+1. COMPLAINT ID
+
+Complaint IDs are database-generated primary keys.
+
+New complaint ID = next available unique database ID
+
+IDs are global across all customers. A new customer does not restart numbering.
+
+2. PRIORITY CALCULATION
+
+The system combines the complaint subject and description:
+
+text = lowercase(subject + " " + description)
+
+If text contains any of:
+    safety, fraud, outage, critical
+then:
+    priority = CRITICAL
+
+Else if text contains any of:
+    urgent, blocked, broken, payment, high
+then:
+    priority = HIGH
+
+Else if the user supplied a valid priority:
+    priority = supplied priority
+
+Else:
+    priority = MEDIUM
+
+Priority is deterministic Python logic and does not use the LLM.
+
+3. SLA DEADLINE
+
+Each complaint category has a configured default SLA duration in hours.
+
+sla_due_at = created_at + SLA_hours_for_category
+
+Example:
+    created_at = 2026-08-27 10:00
+    Technical SLA = 48 hours
+    sla_due_at = 2026-08-29 10:00
+
+If a category is not found, the simplified application uses 48 hours.
+
+4. SLA STATE
+
+For resolved or closed complaints:
+    sla_state = completed
+
+For open complaints:
+    remaining_seconds = (sla_due_at - current_time).total_seconds()
+
+If remaining_seconds < 0:
+    sla_state = breached
+
+Else if remaining_seconds <= 24 * 60 * 60:
+    sla_state = due_soon
+
+Else:
+    sla_state = on_track
+
+5. SLA COMPLIANCE
+
+breached_count = number of complaints with breached SLA state
+
+complaint_count = total number of complaints in the selected scope
+
+SLA compliance percentage =
+    ((complaint_count - breached_count) / complaint_count) * 100
+
+If complaint_count = 0:
+    SLA compliance percentage = 100.0
+
+6. AUTOMATIC ESCALATION
+
+Only unresolved complaints whose SLA deadline has passed are considered.
+
+overdue_hours = (current_time - sla_due_at).total_seconds() / 3600
+
+Target escalation level = min(3, 1 + floor(overdue_hours / 24))
+
+Equivalent rules:
+    SLA just breached       -> level 1
+    24 or more hours late   -> level 2
+    48 or more hours late   -> level 3
+
+The current highest escalation level is read from the database.
+Only missing levels up to the target level are inserted.
+This makes the operation idempotent: repeated dashboard requests do not duplicate levels.
+
+7. DUPLICATE DETECTION
+
+The duplicate search scope is:
+    same customer_id
+    same product_id
+    same category
+    created within the previous 7 days
+
+Subject normalization:
+    normalized_subject = lowercase(subject)
+    normalized_subject = collapse repeated whitespace
+
+If an existing complaint in that scope has the same normalized subject:
+    reject the new complaint as a potential duplicate
+
+8. COMPLAINT WORKFLOW
+
+Allowed transitions:
+    NEW -> ASSIGNED
+    NEW -> IN_PROGRESS
+    ASSIGNED -> IN_PROGRESS
+    IN_PROGRESS -> RESOLVED
+    RESOLVED -> CLOSED
+    RESOLVED -> REOPENED
+    CLOSED -> REOPENED
+    REOPENED -> IN_PROGRESS
+
+All other transitions are rejected.
+
+When status becomes RESOLVED:
+    resolved_at = current_time
+
+When status becomes CLOSED:
+    closed_at = current_time
+
+9. FIRST RESPONSE AND RESOLUTION TURNAROUND
+
+The standard formulas are:
+
+first_response_hours =
+    (first_response_at - created_at).total_seconds() / 3600
+
+resolution_hours =
+    (resolved_at - created_at).total_seconds() / 3600
+
+Average first response hours =
+    sum(first_response_hours for responded complaints)
+    / number of responded complaints
+
+Average resolution hours =
+    sum(resolution_hours for resolved complaints)
+    / number of resolved complaints
+
+The current simplified implementation calculates average resolution hours.
+first_response_at is stored for future first-response reporting.
+
+10. OPEN COMPLAINT COUNT
+
+open complaint = status not in {RESOLVED, CLOSED}
+
+open_count = count of open complaints in the selected scope
+
+11. STATUS COUNTS
+
+For each supported status:
+
+status_count = count(complaint.status == selected_status)
+
+Supported statuses:
+    NEW, ASSIGNED, IN_PROGRESS, RESOLVED, CLOSED, REOPENED
+
+12. CATEGORY VOLUME
+
+For every category:
+
+category_volume = count(complaints where complaint.category == category)
+
+13. PRODUCT VOLUME
+
+For every product:
+
+product_volume = count(complaints where complaint.product_id == product_id)
+
+14. CHANNEL VOLUME
+
+For every channel:
+
+channel_volume = count(complaints where complaint.channel == channel)
+
+15. PRIORITY VOLUME
+
+For every priority:
+
+priority_volume = count(complaints where complaint.priority == priority)
+
+16. ESCALATION RATE
+
+escalated_complaints = count of distinct complaints with at least one escalation
+
+escalation rate =
+    (escalated_complaints / complaint_count) * 100
+
+If complaint_count = 0:
+    escalation rate = 0
+
+17. REOPEN RATE
+
+reopened_complaints = count of complaints whose status is REOPENED
+
+reopen rate =
+    (reopened_complaints / complaint_count) * 100
+
+If complaint_count = 0:
+    reopen rate = 0
+
+18. AGENT OPEN WORKLOAD
+
+For each support agent:
+
+open_workload = count of complaints where:
+    assigned_agent_id = agent.id
+    AND status not in {RESOLVED, CLOSED}
+
+The manager dropdown displays this value beside each agent's email.
+
+19. AGENT RESOLVED COUNT
+
+For each support agent:
+
+resolved_count = count of complaints where:
+    assigned_agent_id = agent.id
+    AND status in {RESOLVED, CLOSED}
+
+20. AGENT RANKING
+
+The ranking query groups resolved complaints by assigned agent and applies:
+
+RANK() OVER (ORDER BY resolved_count DESC)
+
+The agent with the highest resolved_count receives rank 1.
+Ties receive the same rank according to SQL RANK semantics.
+
+21. PAGINATION
+
+For page number p and page size s:
+
+offset = (p - 1) * s
+
+returned rows = rows[offset : offset + s]
+
+22. TTL CACHE
+
+Cache expiry time:
+
+expires_at = monotonic_clock_now + TTL_seconds
+
+Current dashboard TTL:
+    TTL_seconds = 60
+
+Cache behavior:
+    key absent or expired -> MISS -> calculate and store
+    key present and unexpired -> HIT -> return cached value
+
+Dashboard cache key:
+    dashboard:{user_id}:{role}
+
+Cache is cleared after complaint writes such as creation, assignment, status change,
+escalation, and automatic escalation.
+
+23. IMPORT PROGRESS
+
+For row index i and total row count n:
+
+progress_percent = floor((i / max(n, 1)) * 100)
+
+Each row is either accepted or rejected.
+Rejected rows store a validation or business-rule reason.
+
+24. JOB COUNTS
+
+accepted_count = number of successfully inserted rows
+rejected_count = number of rejected rows
+
+A successful job ends with:
+    status = COMPLETED
+    progress = 100
+    finished_at = current_time
+
+A failed job ends with:
+    status = FAILED
+    error = failure description
+    finished_at = current_time
+
+25. LLM BOUNDARY
+
+Python/SQL computes the metrics first.
+
+metrics = deterministic complaint and SLA calculations
+narrative = LLM-generated text using metrics as input
+
+The LLM must not determine:
+    priority
+    SLA deadline
+    SLA state
+    escalation level
+    duplicate status
+    workflow validity
+    authorization

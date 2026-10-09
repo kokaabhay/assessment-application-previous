@@ -61,6 +61,7 @@ class ComplaintResponse(BaseModel):
     status: str
     assigned_team_id: int | None
     assigned_agent_id: int | None
+    assigned_agent_email: str | None = None
     created_at: datetime
     sla_due_at: datetime
     resolved_at: datetime | None

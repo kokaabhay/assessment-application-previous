@@ -3,8 +3,9 @@ import logging
 from datetime import datetime, timedelta
 from typing import Any
 from app.services.llm_services import LLMService
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.cache import TTLCache
 from app.core.exceptions import BusinessRuleError, ForbiddenError, ResourceNotFoundError
@@ -21,6 +22,58 @@ class ComplaintService:
     @staticmethod
     def invalidate_cache() -> None:
         analytics_cache.clear()
+
+    @staticmethod
+    async def auto_escalate_breaches(db: AsyncSession) -> int:
+        """Create missing escalation levels for unresolved SLA breaches.
+
+        Level 1 is created at breach, level 2 after 24 overdue hours, and
+        level 3 after 48 overdue hours. Existing levels are not duplicated.
+        """
+        now = datetime.utcnow()
+        complaints = list((await db.scalars(
+            select(Complaint).where(
+                Complaint.status.notin_(["RESOLVED", "CLOSED"]),
+                Complaint.sla_due_at < now,
+            )
+        )).all())
+        if not complaints:
+            return 0
+
+        system_actor = await db.scalar(
+            select(User).where(
+                User.role.in_(["ADMIN", "admin"]),
+                User.is_active.is_(True),
+            ).order_by(User.id)
+        )
+        if system_actor is None:
+            logger.warning("Automatic escalation skipped: no active admin actor exists")
+            return 0
+
+        created_count = 0
+        for complaint in complaints:
+            overdue_hours = (now - complaint.sla_due_at).total_seconds() / 3600
+            target_level = min(3, 1 + int(overdue_hours // 24))
+            current_level = await db.scalar(
+                select(func.max(Escalation.level)).where(
+                    Escalation.complaint_id == complaint.id
+                )
+            ) or 0
+            for level in range(current_level + 1, target_level + 1):
+                db.add(Escalation(
+                    complaint_id=complaint.id,
+                    level=level,
+                    reason=f"Automatic SLA breach escalation (level {level}).",
+                    escalated_by=system_actor.id,
+                    assigned_to=complaint.assigned_agent_id,
+                ))
+                created_count += 1
+
+        if created_count:
+            await db.commit()
+            ComplaintService.invalidate_cache()
+            logger.info("Created %s automatic SLA escalation(s)", created_count)
+        return created_count
 
     @staticmethod
     def priority(data: ComplaintCreate) -> str:
@@ -67,13 +120,17 @@ class ComplaintService:
             return
         if role == "CUSTOMER" and complaint.customer_id == user.id:
             return
-        if role == "SUPPORT_AGENT" and (complaint.assigned_agent_id == user.id or not write):
+        if role == "SUPPORT_AGENT" and complaint.assigned_agent_id == user.id:
             return
         raise ForbiddenError("You do not have access to this complaint.")
 
     @staticmethod
     async def get(db: AsyncSession, complaint_id: int, user: User) -> Complaint:
-        complaint = await db.get(Complaint, complaint_id)
+        complaint = await db.scalar(
+            select(Complaint)
+            .options(selectinload(Complaint.assigned_agent))
+            .where(Complaint.id == complaint_id)
+        )
         if complaint is None:
             raise ResourceNotFoundError("Complaint not found.")
         ComplaintService.allowed(user, complaint)
